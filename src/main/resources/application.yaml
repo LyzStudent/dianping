@@ -1,0 +1,48 @@
+server:
+  port: 8079
+spring:
+  application:
+    name: dianping
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/dianping?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
+    username: root
+    password: 123456
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 10
+          min-idle: 1
+          time-between-eviction-runs: 10s
+      database: 1
+  jackson:
+    default-property-inclusion: non_default # JSON?????????
+  rabbitmq:
+    host: localhost
+    username: guest
+    password: guest
+    virtual-host: /
+    port: 15672
+    listener:
+      simple:
+        concurrency: 10
+        max-concurrency: 10
+        prefetch: 1
+        auto-startup: true
+        default-requeue-rejected: true
+    template:
+      retry:
+        enabled: true
+        initial-interval: 1000ms
+        max-retries: 3
+        max-interval: 10000ms
+        multiplier: 1
+mybatis-plus:
+  type-aliases-package: com.dianping.entity
+logging:
+  level:
+    com.dianping: debug
