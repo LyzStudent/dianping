@@ -2,10 +2,10 @@ package com.dianping.utils;
 
 import cn.hutool.extra.mail.Mail;
 
-import javax.mail.*;
-import javax.mail.internet.AddressException;
-import javax.mail.internet.InternetAddress;
-import javax.mail.internet.MimeMessage;
+import jakarta.mail.*;
+import jakarta.mail.internet.AddressException;
+import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.internet.MimeMessage;
 import java.net.InetAddress;
 import java.net.URL;
 import java.util.*;
@@ -32,7 +32,7 @@ public class MailUtils {
         properties.put("mail.password","tbrymqzjloiedbaj");
         //构建授权信息，用于进行SMTP进行身份验证
         Authenticator authenticator=new Authenticator() {
-            protected javax.mail.PasswordAuthentication getPasswordAuthentication() {
+            protected jakarta.mail.PasswordAuthentication getPasswordAuthentication() {
                 String username=properties.getProperty("mail.user");
                 String password=properties.getProperty("mail.password");
                 return new PasswordAuthentication(username,password);

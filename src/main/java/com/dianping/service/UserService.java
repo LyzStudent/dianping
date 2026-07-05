@@ -6,7 +6,7 @@ import com.dianping.dto.Result;
 import com.dianping.entity.User;
 import jakarta.servlet.http.HttpSession;
 
-import javax.mail.MessagingException;
+import jakarta.mail.MessagingException;
 
 public interface UserService extends IService<User> {
     /**
