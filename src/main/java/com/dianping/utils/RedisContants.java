@@ -25,6 +25,8 @@ public class RedisContants {
 
     public static final String CACHE_SHOP_TYPE_KEY="cache:shoptype:";
 
+    public static final String SECKILL_STOCK_KEY="seckill:stock:";
+
 
 
 
