@@ -32,11 +32,5 @@ public class RedisContants {
     public static final String FEED_KEY="feed:";
     public static final String BLOG_LIKED_KEY="blog:liked:";
 
-
-
-
-
-
-
-
+    public static final String COMMENT_LIKED_KEY = "comment:liked:";
 }

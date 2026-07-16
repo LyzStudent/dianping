@@ -56,6 +56,7 @@ public class UserController {
     }
 
     // 获取当前登录用户详情
+    @GetMapping("/me")
     public Result me(){
         //获取当前登录用户并返回
         UserDTO user= UserHolder.getUser();
@@ -80,6 +81,7 @@ public class UserController {
 
 
     // 查询用户详情
+    @GetMapping("/{id}")
     public Result queryById(@PathVariable("id") Long userId){
         //查看详情
         User user=userService.getById(userId);
