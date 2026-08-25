@@ -55,6 +55,4 @@ npm run dev          # http://localhost:3000，API 自动代理到网关 8080
 - **秒杀下单 `/seckill/{id}` 需登录**；Sentinel 限流时返回「系统繁忙，请稍后再试」。
 
 ## 其他
-
-- `frontend-vanilla/`：第一版原生 JS 单页（零依赖）备份，已不再使用，可删。
 - 本地 `application.yml` 是配置主源，Nacos 只放 `common.yml` + 各服务 datasource 覆盖。
