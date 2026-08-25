@@ -1,0 +1,1896 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "大众点评微服务 API 文档",
+    "version": "1.0.0",
+    "description": "Spring Cloud 微服务版大众点评接口文档。所有请求统一走网关 http://localhost:8080，再由网关按前缀路由到各服务（user/shop/blog/trade）。\n\n**鉴权说明**：登录成功返回 JWT token，后续请求在请求头 `authorization` 中带上该 token（直接放 token，不要加 \"Bearer \" 前缀）。未带或失效返回 HTTP 401。白名单接口（登录、商家、优惠券、热门博客、上传）无需 token。\n\n**响应统一结构**：`{success, errorMsg, data, total}`，success 为 false 时看 errorMsg。"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "网关 Gateway（生产地址按环境替换）"
+    }
+  ],
+  "tags": [
+    { "name": "用户服务", "description": "user-service：验证码/登录/登出/用户信息/签到" },
+    { "name": "商家服务", "description": "shop-service：商铺 CRUD / 按类型查询 / ES 搜索" },
+    { "name": "商家类型", "description": "shop-service：商铺分类列表" },
+    { "name": "店铺评价", "description": "shop-service：店铺评论 CRUD（需登录）" },
+    { "name": "文件上传", "description": "shop-service：图片上传/删除" },
+    { "name": "博客服务", "description": "blog-service：博客发布/点赞/分页/关注流（部分需登录）" },
+    { "name": "博客评论", "description": "blog-service：博客评论/回复/点赞（需登录）" },
+    { "name": "关注服务", "description": "blog-service：关注/取关/共同关注（需登录）" },
+    { "name": "优惠券服务", "description": "trade-service：优惠券/秒杀券" },
+    { "name": "秒杀服务", "description": "trade-service：秒杀下单（需登录，Sentinel 限流）" }
+  ],
+  "security": [
+    { "Authorization": [] }
+  ],
+  "paths": {
+    "/user/code": {
+      "post": {
+        "tags": ["用户服务"],
+        "summary": "发送验证码（发到邮箱）",
+        "description": "给指定邮箱发送登录验证码。**本项目验证码走邮件**，phone 参数传邮箱地址。有频控：1 分钟内只能发 1 次，5 分钟内超 5 次进入一级限制（等 5 分钟），超 8 次进入二级限制（等 20 分钟）。",
+        "security": [],
+        "parameters": [
+          {
+            "name": "phone",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "example": "test@qq.com" },
+            "description": "邮箱地址"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "null" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/login": {
+      "post": {
+        "tags": ["用户服务"],
+        "summary": "登录/注册",
+        "description": "用邮箱 + 验证码登录。验证码需要先通过 /user/code 获取，或用 redis-cli 直接塞：`redis-cli -n 5 SET login:code:<邮箱> <验证码>`。登录成功返回 JWT token，作为后续请求的 authorization 请求头。用户不存在会自动注册。",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginFormDTO" },
+              "example": {
+                "phone": "test@qq.com",
+                "code": "123456",
+                "password": null
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功，data 为 JWT token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "string", "example": "eyJhbGciOiJIUzM4NCJ9.xxxxx.yyyyy" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/logout": {
+      "post": {
+        "tags": ["用户服务"],
+        "summary": "登出",
+        "description": "JWT 无状态不可删，登出后将 token 写入 Redis 黑名单，网关命中黑名单即拒绝。需要登录。",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "null" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/user/me": {
+      "get": {
+        "tags": ["用户服务"],
+        "summary": "当前登录用户信息",
+        "description": "从网关注入的用户信息中取当前登录用户（无需查库）。需要登录。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "$ref": "#/components/schemas/UserDTO" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/user/info/{id}": {
+      "get": {
+        "tags": ["用户服务"],
+        "summary": "查看用户详情信息",
+        "description": "返回 tb_user_info 详情（城市/简介/粉丝/关注数/性别/生日/积分等）。没有详情时 data 为 null。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "$ref": "#/components/schemas/UserInfo" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/user/{id}": {
+      "get": {
+        "tags": ["用户服务"],
+        "summary": "根据 id 查询用户（DTO）",
+        "description": "返回精简用户信息 UserDTO（id/nickName/icon）。需要登录。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "$ref": "#/components/schemas/UserDTO" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/user/sign": {
+      "post": {
+        "tags": ["用户服务"],
+        "summary": "签到",
+        "description": "Redis BitMap 按年:月:日记录签到，同一天重复签到幂等。需要登录。",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "null" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/user/sign/count": {
+      "get": {
+        "tags": ["用户服务"],
+        "summary": "统计本月连续签到天数",
+        "description": "从当月 1 号开始计算连续签到天数。需要登录。",
+        "responses": {
+          "200": {
+            "description": "成功，data 为连续签到天数",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "integer", "example": 3 },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/user/dto/{id}": {
+      "get": {
+        "tags": ["用户服务"],
+        "summary": "Feign 内部接口：按 id 查 UserDTO",
+        "description": "供 shop/blog/trade 服务通过 OpenFeign 调用（UserClient），也可带 token 直接测。用户不存在返回 null。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserDTO" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/user/dtos": {
+      "get": {
+        "tags": ["用户服务"],
+        "summary": "Feign 内部接口：批量查 UserDTO",
+        "description": "ids 用逗号分隔，按传入顺序返回。供跨服务批量查用户昵称。",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "example": "1,2,3" },
+            "description": "用户 id 列表，逗号分隔"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/UserDTO" }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/user/inner/points/add": {
+      "post": {
+        "tags": ["用户服务"],
+        "summary": "Feign 内部接口：加积分（Seata 分布式事务演示）",
+        "description": "秒杀下单成功后，trade 服务通过 Feign 调用本接口给用户加积分，整个过程在 Seata 全局事务（@GlobalTransactional）内。需要登录（或携带合法 token）。",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 1 }
+          },
+          {
+            "name": "points",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "integer", "example": 10 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "null" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+
+    "/shop/{id}": {
+      "get": {
+        "tags": ["商家服务"],
+        "summary": "根据 id 查询商铺",
+        "description": "走缓存（Redis + 缓存穿透/击穿逻辑）查商铺。data 可能带 distance 字段（按距离查询时才有）。",
+        "security": [],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "$ref": "#/components/schemas/Shop" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shop": {
+      "post": {
+        "tags": ["商家服务"],
+        "summary": "新增商铺",
+        "description": "写入 tb_shop 并同步到 ES 索引。data 返回新商铺 id。",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Shop" },
+              "example": {
+                "name": "测试火锅店",
+                "typeId": 1,
+                "images": "",
+                "area": "陆家嘴",
+                "address": "世纪大道100号",
+                "x": 121.5,
+                "y": 31.2,
+                "avgPrice": 120,
+                "sold": 100,
+                "comments": 10,
+                "score": 45,
+                "openTime": "10:00-22:00"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功，data 为新店铺 id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "integer", "example": 15 },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["商家服务"],
+        "summary": "更新商铺",
+        "description": "更新 tb_shop 并同步 ES 索引。body 中必须带 id。",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Shop" },
+              "example": {
+                "id": 1,
+                "name": "更新后的店名",
+                "typeId": 1,
+                "avgPrice": 150
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "null" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shop/of/type": {
+      "get": {
+        "tags": ["商家服务"],
+        "summary": "按类型分页查询商铺（支持按距离排序）",
+        "description": "不带 x/y 时按普通分页返回；带 x/y 时基于 Redis GEO 查 5 公里内按距离排序，data 每项带 distance（单位米）。",
+        "security": [],
+        "parameters": [
+          {
+            "name": "typeId",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "integer", "example": 1 }
+          },
+          {
+            "name": "current",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 1, "example": 1 }
+          },
+          {
+            "name": "x",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "number", "format": "double", "example": 121.5 },
+            "description": "经度（用于距离查询）"
+          },
+          {
+            "name": "y",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "number", "format": "double", "example": 31.2 },
+            "description": "纬度（用于距离查询）"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Shop" }
+                    },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shop/search": {
+      "get": {
+        "tags": ["商家服务"],
+        "summary": "ES 关键词搜索商铺",
+        "description": "基于 Elasticsearch（IK 分词）搜索，支持关键词 + 类型过滤，name 命中高亮。分页参数 page/size。返回 data 为列表，total 为命中总数。",
+        "security": [],
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "example": "火锅" }
+          },
+          {
+            "name": "typeId",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "example": 1 }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 1, "example": 1 }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 10, "example": 10 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功，total 为命中总数",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/ShopDocument" }
+                    },
+                    "total": { "type": "integer", "example": 12 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shop/search/init": {
+      "get": {
+        "tags": ["商家服务"],
+        "summary": "全量重建 ES 索引",
+        "description": "把 tb_shop 全部数据重新同步到 ES（启动时已自动同步一次）。调试 ES 用。",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "null" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shop-type/list": {
+      "get": {
+        "tags": ["商家类型"],
+        "summary": "查询商铺分类列表",
+        "description": "按 sort 排序返回全部商铺类型，带 Redis 缓存。",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/ShopType" }
+                    },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shop-review": {
+      "post": {
+        "tags": ["店铺评价"],
+        "summary": "发表店铺评论",
+        "description": "需要登录。userId 由后端从登录态取。每个用户对同一店铺只能评论一次；评分 1-5；评论成功后重算店铺平均分。data 返回评论 id。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ShopReview" },
+              "example": {
+                "shopId": 1,
+                "rating": 5,
+                "content": "环境很好，服务到位",
+                "images": "/blogs/1/2/xxx.jpg"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功，data 为评论 id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "integer", "example": 3 },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "put": {
+        "tags": ["店铺评价"],
+        "summary": "修改店铺评论",
+        "description": "需要登录，只能改自己的评论。body 必须带 id。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ShopReview" },
+              "example": {
+                "id": 3,
+                "rating": 4,
+                "content": "更新后的评论内容"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "null" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/shop-review/{id}": {
+      "delete": {
+        "tags": ["店铺评价"],
+        "summary": "删除店铺评论",
+        "description": "需要登录，只能删自己的评论。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 3 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "null" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/shop-review/of/shop": {
+      "get": {
+        "tags": ["店铺评价"],
+        "summary": "查询某店铺的评论列表",
+        "description": "需要登录。分页（每页 10 条）按时间倒序，评论会带出用户昵称/头像（Feign 跨服务查 user-service）。",
+        "parameters": [
+          {
+            "name": "shopId",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 1 }
+          },
+          {
+            "name": "current",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 1, "example": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/ShopReview" }
+                    },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/shop-review/my": {
+      "get": {
+        "tags": ["店铺评价"],
+        "summary": "查询当前用户对某店铺的评论",
+        "description": "需要登录。常用于判断当前用户是否已评论该店。",
+        "parameters": [
+          {
+            "name": "shopId",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "$ref": "#/components/schemas/ShopReview" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/upload/blog": {
+      "post": {
+        "tags": ["文件上传"],
+        "summary": "上传图片",
+        "description": "multipart/form-data 上传图片，存到 nginx 静态目录。data 返回相对路径文件名（如 /blogs/3/a/xxx.jpg），拼接 nginx 地址即可访问。",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "图片文件"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功，data 为文件名",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "string", "example": "/blogs/3/a/xxx.jpg" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/upload/blog/delete": {
+      "get": {
+        "tags": ["文件上传"],
+        "summary": "删除图片",
+        "description": "按文件名删除已上传的图片。",
+        "security": [],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "example": "/blogs/3/a/xxx.jpg" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "null" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/blog": {
+      "post": {
+        "tags": ["博客服务"],
+        "summary": "发布探店博客",
+        "description": "需要登录。userId 后端取。发布成功后写入关注者 Feed 流（Redis ZSET），并给店铺点赞数 +1。data 返回博客 id。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Blog" },
+              "example": {
+                "shopId": 1,
+                "title": "这家火锅太棒了",
+                "image": "/blogs/3/a/xxx.jpg,/blogs/3/b/yyy.jpg",
+                "content": "推荐大家来吃，牛油锅底绝了"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功，data 为博客 id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "integer", "example": 5 },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/blog/like/{id}": {
+      "put": {
+        "tags": ["博客服务"],
+        "summary": "点赞/取消点赞博客",
+        "description": "需要登录。基于 Redis ZSET 点赞（可查前 5 个点赞用户），重复点击取消。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 5 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "null" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/blog/likes/{id}": {
+      "get": {
+        "tags": ["博客服务"],
+        "summary": "查询博客点赞的前 5 个用户",
+        "description": "需要登录。返回点赞时间最新的前 5 个用户 DTO。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 5 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/UserDTO" }
+                    },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/blog/of/me": {
+      "get": {
+        "tags": ["博客服务"],
+        "summary": "查询当前用户发布的博客",
+        "description": "需要登录。分页（每页 10 条）。",
+        "parameters": [
+          {
+            "name": "current",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 1, "example": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Blog" }
+                    },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/blog/of/user": {
+      "get": {
+        "tags": ["博客服务"],
+        "summary": "查询指定用户发布的博客",
+        "description": "需要登录。按用户 id 分页查。",
+        "parameters": [
+          {
+            "name": "current",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 1, "example": 1 }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Blog" }
+                    },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/blog/of/follow": {
+      "get": {
+        "tags": ["博客服务"],
+        "summary": "滚动分页查询关注人发布的博客（Feed 流）",
+        "description": "需要登录。基于 Redis ZSET 收件箱 + 滚动分页。第一次请求 lastId 传最大值（如 Long.MAX_VALUE），offset 传 0；后续把返回的 minTime 作为 lastId、offset 作为 offset 继续翻页。",
+        "parameters": [
+          {
+            "name": "lastId",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 9223372036854775807 },
+            "description": "本次时间戳游标，首屏传最大值"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 0, "example": 0 },
+            "description": "与上页 minTime 相同的数量"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "$ref": "#/components/schemas/ScrollResult" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/blog/hot": {
+      "get": {
+        "tags": ["博客服务"],
+        "summary": "查询热门博客",
+        "description": "白名单接口，无需登录。按点赞数倒序分页，每页 10 条。博客带用户昵称/头像和当前用户是否点赞（未登录时 isLike 为 null）。",
+        "security": [],
+        "parameters": [
+          {
+            "name": "current",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 1, "example": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Blog" }
+                    },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/blog/{id}": {
+      "get": {
+        "tags": ["博客服务"],
+        "summary": "根据 id 查询博客详情",
+        "description": "需要登录。返回博客 + 作者昵称/头像 + 当前用户是否点赞 + 关联店铺信息。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 5 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "$ref": "#/components/schemas/Blog" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/blog-comments": {
+      "post": {
+        "tags": ["博客评论"],
+        "summary": "发表博客评论（或回复）",
+        "description": "需要登录。一级评论 parentId/answerId 传 0（或省略，后端自动补 0）；回复二级评论时传对应 id。发表后博客评论数 +1。data 返回评论 id。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/BlogComments" },
+              "example": {
+                "blogId": 5,
+                "parentId": 0,
+                "answerId": 0,
+                "content": "看起来很好吃"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功，data 为评论 id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "integer", "example": 8 },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/blog-comments/{id}": {
+      "delete": {
+        "tags": ["博客评论"],
+        "summary": "删除博客评论",
+        "description": "需要登录，只能删自己的评论。删除后博客评论数 -1。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 8 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "null" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/blog-comments/of/blog": {
+      "get": {
+        "tags": ["博客评论"],
+        "summary": "按博客分页查询一级评论（含前 3 条回复）",
+        "description": "需要登录。分页（每页 10 条），一级评论按点赞数/时间倒序，每条评论附带前 3 条回复、评论者和被回复者昵称。total 返回评论总数。",
+        "parameters": [
+          {
+            "name": "blogId",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 5 }
+          },
+          {
+            "name": "current",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 1, "example": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/BlogComments" }
+                    },
+                    "total": { "type": "integer", "example": 5 }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/blog-comments/replies": {
+      "get": {
+        "tags": ["博客评论"],
+        "summary": "查询某条一级评论的更多回复",
+        "description": "需要登录。注意：参数名是 blogId，实际传的是**一级评论 id**（parentId）。分页加载更多回复。",
+        "parameters": [
+          {
+            "name": "blogId",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 8 },
+            "description": "一级评论 id（作为 parentId 查询）"
+          },
+          {
+            "name": "current",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 1, "example": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/BlogComments" }
+                    },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/blog-comments/like/{id}": {
+      "put": {
+        "tags": ["博客评论"],
+        "summary": "点赞/取消点赞博客评论",
+        "description": "需要登录。重复点击取消。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 8 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "null" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/follow/or/not/{id}": {
+      "get": {
+        "tags": ["关注服务"],
+        "summary": "判断当前用户是否关注了某人",
+        "description": "需要登录。data 为 boolean（true=已关注）。页面加载时调用。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 2 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "boolean", "example": true },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/follow/{id}/{isFollow}": {
+      "put": {
+        "tags": ["关注服务"],
+        "summary": "关注 / 取消关注",
+        "description": "需要登录。isFollow 传 true 关注、false 取关。关注时把被关注人加入自己的 Feed 收件箱（后续关注流能刷到 TA 的博客）。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 2 },
+            "description": "被关注/取关的用户 id"
+          },
+          {
+            "name": "isFollow",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "boolean", "example": true }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "null" },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/follow/common/{id}": {
+      "get": {
+        "tags": ["关注服务"],
+        "summary": "查询与某用户的共同关注",
+        "description": "需要登录。基于 Redis Set 求交集。返回 UserDTO 列表。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 2 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/UserDTO" }
+                    },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/voucher": {
+      "post": {
+        "tags": ["优惠券服务"],
+        "summary": "新增普通优惠券",
+        "description": "普通代金券，type=0。data 返回优惠券 id。",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Voucher" },
+              "example": {
+                "shopId": 1,
+                "title": "满100减20",
+                "subTitle": "全店通用",
+                "rules": "每人限购2张",
+                "payValue": 20,
+                "actualValue": 100,
+                "type": 0
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功，data 为优惠券 id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "integer", "example": 11 },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/voucher/seckill": {
+      "post": {
+        "tags": ["优惠券服务"],
+        "summary": "新增秒杀券",
+        "description": "type=1，需带 stock（库存，写入 tb_seckill_voucher + Redis seckill:stock:&lt;id&gt;）、beginTime、endTime。data 返回秒杀券 id。",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Voucher" },
+              "example": {
+                "shopId": 1,
+                "title": "5折秒杀券",
+                "subTitle": "限量",
+                "rules": "每人限购1张",
+                "payValue": 50,
+                "actualValue": 100,
+                "type": 1,
+                "stock": 100,
+                "beginTime": "2026-08-25 00:00:00",
+                "endTime": "2026-08-30 23:59:59"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功，data 为秒杀券 id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "integer", "example": 12 },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/voucher/list/{shopId}": {
+      "get": {
+        "tags": ["优惠券服务"],
+        "summary": "查询店铺的优惠券列表",
+        "description": "返回该店铺的普通券 + 秒杀券（秒杀券带 stock/beginTime/endTime）。",
+        "security": [],
+        "parameters": [
+          {
+            "name": "shopId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Voucher" }
+                    },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/seckill/{id}": {
+      "post": {
+        "tags": ["秒杀服务"],
+        "summary": "秒杀下单",
+        "description": "需要登录。完整链路：Redis Lua 脚本扣库存+一人一单校验 → 发 MQ 消息异步下单（RedisIdWorker 生成订单号）→ 消费端 @GlobalTransactional（Seata）创建订单并 Feign 调 user-service 加积分。\n\n返回：成功 data=订单号；库存不足「库存不足」；重复下单「该用户重复下单」。Sentinel 限流时返回「系统繁忙，请稍后再试」。",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64", "example": 12 },
+            "description": "秒杀券 id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功，data 为订单号（RedisIdWorker 生成）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "errorMsg": { "type": "string", "nullable": true },
+                    "data": { "type": "integer", "example": 1833333333333333 },
+                    "total": { "type": "integer", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "Unauthorized": {
+        "description": "未登录 / token 失效 / 已登出（黑名单命中）",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": false },
+                "errorMsg": { "type": "string", "example": "未登录" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "Authorization": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "authorization",
+        "description": "登录 /user/login 返回的 JWT token，直接放 token 值（不要加 Bearer 前缀）。"
+      }
+    },
+    "schemas": {
+      "LoginFormDTO": {
+        "type": "object",
+        "properties": {
+          "phone": { "type": "string", "description": "邮箱地址（本项目验证码走邮箱）", "example": "test@qq.com" },
+          "code": { "type": "string", "description": "验证码", "example": "123456" },
+          "password": { "type": "string", "description": "密码（预留字段，当前登录只用验证码）", "nullable": true }
+        }
+      },
+      "UserDTO": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "format": "int64", "example": 1 },
+          "nickName": { "type": "string", "example": "user_abc1234567" },
+          "icon": { "type": "string", "description": "头像", "example": "/blogs/0/1/xxx.jpg" }
+        }
+      },
+      "UserInfo": {
+        "type": "object",
+        "properties": {
+          "userId": { "type": "integer", "format": "int64", "example": 1 },
+          "city": { "type": "string", "example": "上海" },
+          "introduce": { "type": "string", "description": "个人介绍" },
+          "fansCount": { "type": "integer", "example": 10 },
+          "followCount": { "type": "integer", "example": 5 },
+          "gender": { "type": "boolean", "description": "0:男 1:女" },
+          "birthday": { "type": "string", "format": "date", "example": "1998-06-01" },
+          "credit": { "type": "integer", "description": "积分", "example": 20 },
+          "level": { "type": "boolean", "description": "会员等级 0~9 级（boolean 存储）" },
+          "createTime": { "type": "string", "format": "date-time" },
+          "updateTime": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Shop": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "format": "int64", "example": 1 },
+          "name": { "type": "string", "example": "老重庆火锅" },
+          "typeId": { "type": "integer", "format": "int64", "example": 1 },
+          "images": { "type": "string", "description": "多图逗号分隔", "example": "/blogs/0/1/a.jpg,/blogs/0/1/b.jpg" },
+          "area": { "type": "string", "example": "陆家嘴" },
+          "address": { "type": "string", "example": "世纪大道100号" },
+          "x": { "type": "number", "format": "double", "description": "经度", "example": 121.5 },
+          "y": { "type": "number", "format": "double", "description": "纬度", "example": 31.2 },
+          "avgPrice": { "type": "integer", "format": "int64", "description": "均价（元）", "example": 120 },
+          "sold": { "type": "integer", "description": "销量", "example": 100 },
+          "comments": { "type": "integer", "description": "评论数", "example": 10 },
+          "score": { "type": "integer", "description": "评分 1-5 乘 10 存储（45=4.5 分）", "example": 45 },
+          "openTime": { "type": "string", "description": "营业时间（库列 open_hours）", "example": "10:00-22:00" },
+          "createTime": { "type": "string", "format": "date-time" },
+          "updateTime": { "type": "string", "format": "date-time" },
+          "distance": { "type": "number", "format": "double", "description": "距离（米），仅按距离查询时返回", "nullable": true }
+        }
+      },
+      "ShopType": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "format": "int64", "example": 1 },
+          "name": { "type": "string", "example": "美食" },
+          "icon": { "type": "string", "example": "/types/ms.png" },
+          "sort": { "type": "integer", "example": 1 }
+        }
+      },
+      "ShopReview": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "format": "int64", "example": 3 },
+          "shopId": { "type": "integer", "format": "int64", "example": 1 },
+          "userId": { "type": "integer", "format": "int64", "description": "评论人（后端从登录态填）" },
+          "rating": { "type": "integer", "description": "评分 1-5", "example": 5 },
+          "content": { "type": "string", "example": "环境很好" },
+          "images": { "type": "string", "description": "评论图片" },
+          "createTime": { "type": "string", "format": "date-time" },
+          "updateTime": { "type": "string", "format": "date-time" },
+          "nickName": { "type": "string", "description": "评论人昵称（查询时填充）" },
+          "icon": { "type": "string", "description": "评论人头像（查询时填充）" }
+        }
+      },
+      "Voucher": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "format": "int64", "example": 12 },
+          "shopId": { "type": "integer", "format": "int64", "example": 1 },
+          "title": { "type": "string", "example": "5折秒杀券" },
+          "subTitle": { "type": "string", "example": "限量" },
+          "rules": { "type": "string", "example": "每人限购1张" },
+          "payValue": { "type": "integer", "format": "int64", "description": "支付金额", "example": 50 },
+          "actualValue": { "type": "integer", "format": "int64", "description": "抵扣金额", "example": 100 },
+          "type": { "type": "integer", "description": "0 普通券，1 秒杀券", "example": 1 },
+          "status": { "type": "integer", "description": "状态", "example": 1 },
+          "stock": { "type": "integer", "description": "库存（仅秒杀券/新增秒杀券时填）", "example": 100 },
+          "beginTime": { "type": "string", "format": "date-time", "description": "生效时间（秒杀券）", "example": "2026-08-25 00:00:00" },
+          "endTime": { "type": "string", "format": "date-time", "description": "失效时间（秒杀券）", "example": "2026-08-30 23:59:59" },
+          "createTime": { "type": "string", "format": "date-time" },
+          "updateTime": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Blog": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "format": "int64", "example": 5 },
+          "shopId": { "type": "integer", "format": "int64", "description": "关联店铺", "example": 1 },
+          "userId": { "type": "integer", "format": "int64", "description": "作者（后端从登录态填）" },
+          "icon": { "type": "string", "description": "作者头像（查询时填充）" },
+          "name": { "type": "string", "description": "作者昵称（查询时填充）" },
+          "isLike": { "type": "boolean", "description": "当前用户是否已点赞（查询时填充）" },
+          "title": { "type": "string", "example": "这家火锅太棒了" },
+          "image": { "type": "string", "description": "探店图片，最多9张逗号分隔", "example": "/blogs/3/a/xxx.jpg,/blogs/3/b/yyy.jpg" },
+          "content": { "type": "string", "example": "推荐大家来吃" },
+          "liked": { "type": "integer", "description": "点赞数", "example": 3 },
+          "comments": { "type": "integer", "description": "评论数", "example": 1 },
+          "createTime": { "type": "string", "format": "date-time" },
+          "updateTime": { "type": "string", "format": "date-time" }
+        }
+      },
+      "BlogComments": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "format": "int64", "example": 8 },
+          "userId": { "type": "integer", "format": "int64", "description": "评论人（后端填）" },
+          "blogId": { "type": "integer", "format": "int64", "example": 5 },
+          "parentId": { "type": "integer", "format": "int64", "description": "一级评论时为 0，回复时为一级评论 id", "example": 0 },
+          "answerId": { "type": "integer", "format": "int64", "description": "回复的目标评论 id，直接回复博客时为 0", "example": 0 },
+          "content": { "type": "string", "example": "看起来很好吃" },
+          "liked": { "type": "integer", "description": "点赞数", "example": 0 },
+          "status": { "type": "integer", "description": "0 正常 1 被举报 2 禁止查看", "example": 0 },
+          "createTime": { "type": "string", "format": "date-time" },
+          "updateTime": { "type": "string", "format": "date-time" },
+          "nickName": { "type": "string", "description": "评论者昵称（查询时填充）" },
+          "icon": { "type": "string", "description": "评论者头像（查询时填充）" },
+          "answerNickName": { "type": "string", "description": "被回复者昵称（查询时填充）" },
+          "isLike": { "type": "boolean", "description": "当前用户是否已点赞" },
+          "replies": {
+            "type": "array",
+            "description": "一级评论下前 3 条回复（查询时填充）",
+            "items": { "$ref": "#/components/schemas/BlogComments" }
+          }
+        }
+      },
+      "ScrollResult": {
+        "type": "object",
+        "description": "关注流滚动分页结果",
+        "properties": {
+          "list": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Blog" }
+          },
+          "minTime": { "type": "integer", "format": "int64", "description": "本次最小时间戳，作为下次 lastId", "example": 1756000000000 },
+          "offset": { "type": "integer", "description": "下次请求的 offset", "example": 1 }
+        }
+      },
+      "ShopDocument": {
+        "type": "object",
+        "description": "ES 搜索返回的商铺文档（name 可能带高亮 <em>）",
+        "properties": {
+          "id": { "type": "integer", "format": "int64", "example": 1 },
+          "name": { "type": "string", "example": "老<em>重庆</em>火锅" },
+          "area": { "type": "string", "example": "陆家嘴" },
+          "address": { "type": "string", "example": "世纪大道100号" },
+          "typeId": { "type": "integer", "format": "int64", "example": 1 },
+          "avgPrice": { "type": "integer", "format": "int64", "example": 120 },
+          "sold": { "type": "integer", "example": 100 },
+          "comments": { "type": "integer", "example": 10 },
+          "score": { "type": "integer", "example": 45 },
+          "x": { "type": "number", "format": "double", "example": 121.5 },
+          "y": { "type": "number", "format": "double", "example": 31.2 },
+          "openTime": { "type": "string", "example": "10:00-22:00" },
+          "images": { "type": "string" }
+        }
+      }
+    }
+  }
+}

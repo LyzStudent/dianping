@@ -1,0 +1,45 @@
+server:
+  port: 8081
+spring:
+  application:
+    name: user-service
+  config:
+    import:
+      - optional:nacos:common.yml
+      - optional:nacos:${spring.application.name}.yml
+  cloud:
+    nacos:
+      config:
+        server-addr: 127.0.0.1:8848
+        file-extension: yml
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/dianping_user?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
+    username: root
+    password: 123456
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 5
+hmdp:
+  jwt:
+    secret: dianping-microservice-hm-dianping-secret-2026abcd
+  security:
+    excludepaths: /user/login,/user/code,/user/logout,/user/dto/**,/user/dtos,/user/inner/**
+mybatis-plus:
+  type-aliases-package: com.dianping.user.entity
+
+seata:
+  enabled: true
+  application-id: ${spring.application.name:}
+  tx-service-group: dianping_tx_group
+  service:
+    vgroup-mapping:
+      dianping_tx_group: default
+    grouplist:
+      default: 127.0.0.1:8091
+  registry:
+    type: file
+  config:
+    type: file
