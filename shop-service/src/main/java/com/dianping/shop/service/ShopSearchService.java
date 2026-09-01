@@ -13,11 +13,9 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.dianping.common.dto.Result;
 import com.dianping.shop.document.ShopDocument;
 import com.dianping.shop.entity.Shop;
-import feign.Client;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.RestController;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -25,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -76,7 +75,7 @@ public class ShopSearchService {
     /**
      * 关键词搜索+类型筛选+高亮+排序分页
      */
-    public Result searhc(String keyword,Long typeId,int page,int size){
+    public Result search(String keyword, Long typeId, int page, int size){
         try{
             int from=Math.max(0,(page-1)*size);
             List<Query> must=new ArrayList<>();
@@ -109,6 +108,15 @@ public class ShopSearchService {
                 }
                 return doc;
             }).collect(Collectors.toList());
+
+            //过滤掉未上架店铺（ES 文档不存 status，回库过滤）
+            List<Long> ids=list.stream().map(ShopDocument::getId).toList();
+            if(!ids.isEmpty()){
+                Set<Long> visible=shopService.listByIds(ids).stream()
+                        .filter(s->s.getStatus()!=null&&s.getStatus()==1)
+                        .map(Shop::getId).collect(Collectors.toSet());
+                list=list.stream().filter(d->visible.contains(d.getId())).collect(Collectors.toList());
+            }
 
             long total=response.hits().total()==null?0:response.hits().total().value();
             return Result.ok(list,total);
@@ -158,5 +166,16 @@ public class ShopSearchService {
         }
     }
 
+    /**
+     * 从ES删除店铺（下架时调用）
+     * @param id
+     */
+    public void deleteById(Long id){
+        try{
+            client.delete(d->d.index(INDEX).id(String.valueOf(id)));
+        }catch (IOException e){
+            log.error("ES 删除失败 id= {}",id,e);
+        }
+    }
 
 }

@@ -42,7 +42,11 @@ public class MQReceiver {
         //1.一人一单
         Long userId=voucherOrder.getUserId();
         //2.查询订单
-        long count=voucherOrderService.query().eq("user_id",userId).eq("voucher_id",voucherId).count();
+        long count=voucherOrderService.query()
+                .eq("user_id",userId)
+                .eq("voucher_id",voucherId)
+                .in("status",1,2,3)//只有 未支付/已支付/已核销才算买过；关闭/退款不算
+                .count();
         //3.判断是否存在
         if(count>0){
             //用户已经购买过了

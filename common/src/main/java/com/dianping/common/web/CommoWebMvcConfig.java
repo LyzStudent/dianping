@@ -17,9 +17,11 @@ public class CommoWebMvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(new TraceIdInterceptor()).order(-1);
         registry.addInterceptor(new UserContextInterceptor()).order(0);
         registry.addInterceptor(new LoginInterceptor())
                 .excludePathPatterns(securityProperties.getExcludepaths())
                 .order(1);
+        registry.addInterceptor(new RoleInterceptor()).order(2);
     }
 }

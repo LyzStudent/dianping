@@ -26,6 +26,13 @@ public interface UserService extends IService<User> {
     Result login(LoginFormDTO loginForm, HttpSession session);
 
     /**
+     * 密码登录
+     * @param loginForm
+     * @return
+     */
+    Result loginByPassword(LoginFormDTO loginForm);
+
+    /**
      * 签到
      * @return
      */
@@ -43,4 +50,20 @@ public interface UserService extends IService<User> {
      * @return
      */
     Result logout(String token);
+
+    /**
+     * 注册
+     * @param loginForm
+     * @return
+     */
+    Result register(LoginFormDTO loginForm);
+
+    /**
+     * 手机号注册
+     * @param loginForm
+     * @return
+     */
+    Result registerByPhone(LoginFormDTO loginForm);
+
+    Result signDate(String date);
 }

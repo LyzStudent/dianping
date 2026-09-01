@@ -3,6 +3,7 @@ package com.dianping.user.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Value;
@@ -26,6 +27,11 @@ public class User implements Serializable {
     private Long id;
 
     /**
+     * 角色：1.普通用户 2.商家 3.管理员
+     */
+    private Integer role;
+
+    /**
      * 手机号码
      */
     private String phone;
@@ -33,6 +39,7 @@ public class User implements Serializable {
     /**
      * 密码，加密存储
      */
+    @JsonIgnore
     private String password;
 
     /**

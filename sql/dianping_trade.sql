@@ -77,4 +77,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
-ALTER TABLE tb_voucher_order ADD UNIQUE KEY uk_user_voucher (user_id, voucher_id);
+-- 注意：uk_user_voucher 原是 UNIQUE KEY，会堵死“关单后重新抢购”（同 user+voucher 的旧行已存在，重新下单 INSERT 撞唯一索引报 DuplicateKey）。
+-- 一人一单改由 seckill.lua 的 seckill:order:{vid} Set + MQReceiver 的 status in(1,2,3) 计数双重保证，这里只需普通索引加速查询。
+-- 已有库需先执行：ALTER TABLE tb_voucher_order DROP INDEX uk_user_voucher;
+ALTER TABLE tb_voucher_order ADD KEY idx_user_voucher (user_id, voucher_id);

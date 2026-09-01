@@ -10,7 +10,8 @@ spring:
   cloud:
     sentinel:
       transport:
-        dashboard: 8090
+        dashboard: localhost:8090
+        port: 8719
     nacos:
       config:
         server-addr: 127.0.0.1:8848
@@ -40,7 +41,15 @@ spring:
         - id: trade-service
           uri: lb://trade-service
           predicates:
-            - Path=/voucher/**,/seckill/**
+            - Path=/voucher/**,/seckill/**,/voucher-order/**
+        - id: shop-merchant
+          uri: lb://shop-service
+          predicates:
+            - Path=/merchant/shop/**
+        - id: trade-merchant
+          uri: lb://trade-service
+          predicates:
+            - Path=/merchant/voucher/**,/merchant/voucher-order/**
   data:
     redis:
       host: localhost
@@ -50,4 +59,6 @@ hmdp:
   jwt:
     secret: dianping-microservice-hm-dianping-secret-2026abcd
   security:
-    excludepaths: /user/login,/user/code,/blog/hot,/shop/**,/shop-type/**,/upload/**,/voucher/**
+    excludepaths: /user/login,/user/code,/user/loginByPassword,/user/register,/user/registerByPhone,/blog/hot,/shop/**,/shop-type/**,/upload/**,/voucher/**
+    # 受保护后台路径：即使命中上面的 /shop/** 白名单也必须校验登录（否则 /shop/admin/** 漏检）
+    protectpaths: /shop/admin/**,/shop/merchant/**,/shop/inner/**,/voucher/merchant/**,/shop/favorite/**

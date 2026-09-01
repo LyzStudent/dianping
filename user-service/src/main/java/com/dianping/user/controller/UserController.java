@@ -2,6 +2,8 @@ package com.dianping.user.controller;
 
 
 import cn.hutool.core.bean.BeanUtil;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.dianping.common.annotation.RequireRole;
 import com.dianping.common.dto.LoginFormDTO;
 import com.dianping.common.dto.Result;
 import com.dianping.common.dto.UserDTO;
@@ -41,6 +43,16 @@ public class UserController {
     @PostMapping("code")
     public Result sendCode(@RequestParam("phone") String phone, HttpSession session) throws MessagingException {
         return userService.sendcode(phone,session);
+    }
+
+    /**
+     * 手机号注册
+     * @param loginForm
+     * @return
+     */
+    @PostMapping("/registerByPhone")
+    public Result registerByPhone(@RequestBody LoginFormDTO loginForm){
+        return userService.registerByPhone(loginForm);
     }
 
     /**
@@ -113,6 +125,11 @@ public class UserController {
         return userService.signCount();
     }
 
+    @GetMapping("/sign/date")
+    public Result signDate(@RequestParam(value = "date",required = false) String date){
+        return userService.signDate(date);
+    }
+
     //单个用户
     @GetMapping("/dto/{id}")
     public UserDTO queryDTOById(@PathVariable("id") Long userId){
@@ -146,6 +163,45 @@ public class UserController {
                 .update();
 
         return ok?Result.ok():Result.fail("加入积分失败");
+    }
+
+    /**
+     * 设置密码
+     */
+    @PostMapping("/register")
+    public Result register(@RequestBody LoginFormDTO loginForm){
+        return userService.register(loginForm);
+    }
+
+    @PostMapping("/loginByPassword")
+    public Result loginByPassword(@RequestBody LoginFormDTO loginForm){
+        return userService.loginByPassword(loginForm);
+    }
+
+    @GetMapping("/admin/user/list")
+    @RequireRole("3")
+    public Result adminUserList(@RequestParam(defaultValue = "1") Integer page,
+                                @RequestParam(defaultValue = "10") Integer size){
+        return Result.ok(userService.page(new Page<>(page,size)).getRecords());
+    }
+
+    /**
+     * 封禁用户：写redis黑名单把该用户所有登录态拉黑
+     * 直接改用户role=0，登陆时<=0拒绝
+     * @param userId
+     * @return
+     */
+    @PostMapping("/admin/user/{id}/ban")
+    @RequireRole("3")
+    public Result adminBanUser(@PathVariable("id") Long userId){
+        boolean ok=userService.update().setSql("role=0").eq("id",userId).update();
+        return ok?Result.ok():Result.fail("操作失败");
+    }
+
+    @GetMapping("/admin/stats/user-count")
+    @RequireRole("3")
+    public Result userCount(){
+        return Result.ok(userService.count());
     }
 
 }

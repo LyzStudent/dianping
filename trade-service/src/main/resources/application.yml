@@ -62,3 +62,7 @@ seata:
     type: file
   config:
     type: file
+
+seckill:
+  order:
+    ttl-minutes: 15

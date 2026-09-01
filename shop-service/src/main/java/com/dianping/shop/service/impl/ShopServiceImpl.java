@@ -1,5 +1,6 @@
 package com.dianping.shop.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
@@ -8,23 +9,19 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.dianping.common.dto.Result;
 import com.dianping.common.util.RedisData;
 import com.dianping.common.util.SystemConstants;
+import com.dianping.common.util.UserHolder;
 import com.dianping.shop.entity.Shop;
 import com.dianping.shop.mapper.ShopMapper;
 import com.dianping.shop.service.ShopService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.geo.Distance;
-import org.springframework.data.geo.GeoResult;
-import org.springframework.data.geo.GeoResults;
+import org.springframework.data.geo.*;
 import org.springframework.data.redis.connection.RedisGeoCommands;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.domain.geo.GeoReference;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -64,10 +61,14 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
     public Shop queryWithChuantou(Long id) {
         //先从redis中查，这里的常量是固定的前缀+店铺id
         String shopJson = stringRedisTemplate.opsForValue().get(CACHE_SHOP_KEY + id);
-        //如果不为空（查询到了），则转为Shop类型直接返回
+        //如果不为空（查询到了），则转为Shop类型直接返回；仅返回已上架店铺
         if (StrUtil.isNotBlank(shopJson)) {
             Shop shop = JSONUtil.toBean(shopJson, Shop.class);
-            return shop;
+            if (shop.getStatus() != null) {
+                //新格式缓存：非上架直接视为不存在
+                return shop.getStatus() == 1 ? shop : null;
+            }
+            //旧格式缓存（本次升级前写入，无status字段），回源DB重查并重建缓存
         }
 
         //如果这个数据不存在，将这个数据写入Redis中，并且将value设置为空字符串，然后设置一个较短的TTL，返回错误信息
@@ -78,8 +79,8 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
             return null;
         }
 
-        //不是则去数据库中查
-        Shop shop = getById(id);
+        //不是则去数据库中查（只查已上架店铺，待审核/下架对用户端不可见）
+        Shop shop = query().eq("id", id).eq("status", 1).one();
         //查不到则将空字符串写入Redis
         if (shop == null) {
             stringRedisTemplate.opsForValue().set(CACHE_SHOP_KEY + id, "", CACHE_NULL_TTL, TimeUnit.MINUTES);
@@ -232,12 +233,13 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
     }
 
     @Override
-    public Result queryShopByTyoe(Integer typeId, Integer current, Double x, Double y) {
+    public Result queryShopByType(Integer typeId, Integer current, Double x, Double y) {
         //1.判断是否需要根据距离查询
         if(x==null||y==null){
-            //根据类型分页查询
+            //根据类型分页查询（只展示已上架）
             Page<Shop> page=query()
                     .eq("type_id",typeId)
+                    .eq("status",1)
                     .page(new Page<>(current, SystemConstants.DEFAULT_PAGE_SIZE));
             //返回数据
             return Result.ok(page.getRecords());
@@ -250,10 +252,8 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
         String key=SHOP_GEO_KEY+typeId;
 
         //3.查询redis、按照距离排序、分页；结果：shopId、distance
-        GeoResults<RedisGeoCommands.GeoLocation<String>> results=stringRedisTemplate.opsForGeo().search(key,
-                GeoReference.fromCoordinate(x,y),
-                new Distance(5000),
-                RedisGeoCommands.GeoSearchCommandArgs.newGeoSearchArgs().includeDistance().limit(end));
+        GeoResults<RedisGeoCommands.GeoLocation<String>> results=stringRedisTemplate.opsForGeo().radius(key,
+                new Circle(new Point(x,y),new Distance(5000)),RedisGeoCommands.GeoRadiusCommandArgs.newGeoRadiusArgs().includeDistance().sortAscending().limit(end));
 
         if(results==null){
             return Result.ok(Collections.emptyList());
@@ -262,7 +262,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
         //4.解析出id
         List<GeoResult<RedisGeoCommands.GeoLocation<String>>> list=results.getContent();
 
-        if(list.size()<from){
+        if(list.size()<=from){
             //起始查询位置大于数据总量，则说明没数据了，返回空集合
             return Result.ok(Collections.emptyList());
         }
@@ -277,9 +277,12 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
         });
 
         //5.根据id查询shop
+        if(ids.isEmpty()){
+            return Result.ok(Collections.emptyList());
+        }
         String idsStr=StrUtil.join(",",ids);
 
-        List<Shop> shops=query().in("id",ids).last("ORDER BY FIELD(id,"+idsStr+")").list();
+        List<Shop> shops=query().in("id",ids).eq("status",1).last("ORDER BY FIELD(id,"+idsStr+")").list();
         for(Shop shop:shops){
             //设置shop的举例属性，从distanceMao中根据shopId查询
             shop.setDistance(distanceHashMap.get(shop.getId().toString()).getValue());
@@ -287,5 +290,68 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements Sh
 
         //6.返回
         return Result.ok(shops);
+    }
+
+    /**
+     * 创建/更新自己的店铺
+     * @param shop
+     * @return
+     */
+    @Override
+    public Result merchantSaveShop(Shop shop) {
+        Long userId= UserHolder.getUser().getId();
+        if(shop.getId()==null){
+            //新建店铺强制待审核，商家无法通过表单自定 status
+            shop.setUserId(userId);
+            shop.setStatus(0);
+            save(shop);
+        }else{
+            //只能改自己的店铺
+            Shop db=getById(shop.getId());
+            if(db==null||!userId.equals(db.getUserId())){
+                return Result.fail("店铺不存在或不属于你!");
+            }
+            //status 不可由商家修改；编辑后重新进入待审核，等待管理员再次审核
+            BeanUtil.copyProperties(shop,db,"id","userId","sold","comments","status");
+            db.setStatus(0);
+            updateById(db);
+            clearShopCache(shop.getId());
+            removeShopGeo(shop.getId(),shop.getTypeId());//编辑后重新待审核,出GEO
+        }
+        return Result.ok(shop.getId());
+    }
+
+    @Override
+    public void clearShopCache(Long id) {
+        stringRedisTemplate.delete(CACHE_SHOP_KEY + id);
+    }
+
+    @Override
+    public void saveShopGeo(Long shopId, Long typeId, Double x, Double y) {
+        if(x==null||y==null){
+            return;
+        }
+        stringRedisTemplate.opsForGeo().add(SHOP_GEO_KEY+typeId,new Point(x,y),shopId.toString());
+    }
+
+    @Override
+    public Result rebuildGeo() {
+        Set<String> keys=stringRedisTemplate.keys(SHOP_GEO_KEY+"*");
+        if(keys!=null&&!keys.isEmpty()){
+            stringRedisTemplate.delete(keys);
+        }
+        List<Shop> shops=query().eq("status",1).list();
+        for (Shop s:shops){
+            saveShopGeo(s.getId(),s.getTypeId(),s.getX(),s.getY());
+        }
+        return Result.ok();
+    }
+
+    @Override
+    public void removeShopGeo(Long shopId, Long typeId) {
+        if(typeId==null){
+            return;
+        }
+        stringRedisTemplate.opsForZSet().remove(SHOP_GEO_KEY+typeId,shopId.toString());
     }
 }
