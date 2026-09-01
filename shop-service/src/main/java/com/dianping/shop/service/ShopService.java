@@ -28,5 +28,23 @@ public interface ShopService extends IService<Shop> {
      * @param y
      * @return
      */
-    Result queryShopByTyoe(Integer typeId, Integer current, Double x, Double y);
+    Result queryShopByType(Integer typeId, Integer current, Double x, Double y);
+
+
+    /**
+     * 创建/更新自己的店铺
+     * @param shop
+     * @return
+     */
+    Result merchantSaveShop(Shop shop);
+
+    /**
+     * 清除店铺缓存（管理员审核后调用，避免脏缓存）
+     * @param id
+     */
+    void clearShopCache(Long id);
+
+    void saveShopGeo(Long shopId,Long typeId,Double x,Double y);
+    Result rebuildGeo();//全量重建
+    void removeShopGeo(Long shopId,Long typeId);
 }

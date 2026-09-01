@@ -14,10 +14,12 @@ export default defineConfig({
       '/shop-review': 'http://localhost:8080',
       '/upload': 'http://localhost:8080',
       '/voucher': 'http://localhost:8080',
+      '/voucher-order': 'http://localhost:8080',
       '/seckill': 'http://localhost:8080',
       '/blog': 'http://localhost:8080',
       '/blog-comments': 'http://localhost:8080',
-      '/follow': 'http://localhost:8080'
+      '/follow': 'http://localhost:8080',
+      '/merchant': 'http://localhost:8080'
     }
   }
 })

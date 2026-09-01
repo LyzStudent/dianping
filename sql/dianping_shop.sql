@@ -97,4 +97,17 @@ CREATE TABLE `tb_shop_review`  (
                                   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Compact;
 
+
+CREATE TABLE tb_user_favorite (
+                                  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                                  user_id BIGINT NOT NULL COMMENT '用户id',
+                                  shop_id BIGINT NOT NULL COMMENT '店铺id',
+                                  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+                                  UNIQUE KEY uk_user_shop (user_id, shop_id)
+) COMMENT '店铺收藏';
 SET FOREIGN_KEY_CHECKS = 1;
+
+ALTER TABLE tb_shop ADD COLUMN user_id bigint(20) NULL DEFAULT NULL COMMENT '所属商家用户id';
+ALTER TABLE tb_shop ADD COLUMN status TINYINT NOT NULL DEFAULT 0 COMMENT '店铺状态：0待审核 1上架 2下架';
+-- 存量演示店铺：默认上架，并绑定给演示商家 merchant@dianping.com（id=999002）
+UPDATE tb_shop SET status=1, user_id=999002 WHERE user_id IS NULL;

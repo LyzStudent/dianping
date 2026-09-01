@@ -26,7 +26,7 @@ hmdp:
   jwt:
     secret: dianping-microservice-hm-dianping-secret-2026abcd
   security:
-    excludepaths: /user/login,/user/code,/user/logout,/user/dto/**,/user/dtos,/user/inner/**
+    excludepaths: /user/login,/user/code,/user/loginByPassword,/user/register,/user/registerByPhone,/user/logout,/user/dto/**,/user/dtos,/user/inner/**
 mybatis-plus:
   type-aliases-package: com.dianping.user.entity
 

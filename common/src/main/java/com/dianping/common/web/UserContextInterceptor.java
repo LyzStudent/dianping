@@ -23,6 +23,8 @@ public class UserContextInterceptor implements HandlerInterceptor {
             userDTO.setId(Long.valueOf(userId));
             userDTO.setNickName(request.getHeader("X-User_NickName"));
             userDTO.setIcon(request.getHeader("X-User_Icon"));
+            String role = request.getHeader("X-User_Role");
+            userDTO.setRole(Integer.valueOf(role == null ? "1" : role));
             UserHolder.saveUser(userDTO);
         }
         return true;

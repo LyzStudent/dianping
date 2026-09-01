@@ -32,7 +32,7 @@ CREATE TABLE `tb_sign`  (
 DROP TABLE IF EXISTS `tb_user`;
 CREATE TABLE `tb_user`  (
                             `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
-                            `phone` varchar(11) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '手机号码',
+                            `phone` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '手机号码（兼容邮箱，邮箱最长可达254字符）',
                             `password` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT '' COMMENT '密码，加密存储',
                             `nick_name` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT '' COMMENT '昵称，默认是用户id',
                             `icon` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT '' COMMENT '人物头像',
@@ -1080,3 +1080,10 @@ SET FOREIGN_KEY_CHECKS = 1;
 
 
 ALTER TABLE tb_user ADD COLUMN points INT NOT NULL DEFAULT 0 COMMENT '积分';
+
+ALTER TABLE tb_user ADD COLUMN role TINYINT NOT NULL DEFAULT 1 COMMENT '角色：1普通用户 2商家 3管理员';
+
+-- 演示账号：管理员 / 商家（密码均为 123456）
+INSERT INTO `tb_user` (id,phone,password,nick_name,icon,create_time,update_time,points,role) VALUES
+(999001, 'admin@dianping.com', 'aBc12DeF34Gh56IjK78L@06ab542766ac20171d8235f08ad675a1', '系统管理员', '', NOW(), NOW(), 0, 3),
+(999002, 'merchant@dianping.com', 'xYz90QwEr12Ty34Uv56I@7df7765ea18532ec84866b45d83d441d', '演示商家', '', NOW(), NOW(), 0, 2);

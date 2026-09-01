@@ -33,6 +33,7 @@ public class JwtUtil {
                 .subject(String.valueOf(userDTO.getId()))
                 .claim("nickName",userDTO.getNickName())
                 .claim("icon",userDTO.getIcon())
+                .claim("role",userDTO.getRole()==null?1:userDTO.getRole())
                 .expiration(Date.from(Instant.now().plusSeconds(jwtProperties.getExpireMinutes()*60L)))
                 .signWith(getKey())
                 .compact();

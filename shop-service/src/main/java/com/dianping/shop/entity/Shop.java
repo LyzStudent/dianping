@@ -31,6 +31,11 @@ public class Shop implements Serializable {
     private String name;
 
     /**
+     * 店铺绑定商家
+     */
+    private Long userId;
+
+    /**
      * 商铺类型
      */
     private Long typeId;
@@ -85,6 +90,11 @@ public class Shop implements Serializable {
      */
     @TableField("open_hours")
     private String openTime;
+
+    /**
+     * 店铺状态：0待审核 1上架 2下架
+     */
+    private Integer status;
 
     /**
      * 创建时间
