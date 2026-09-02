@@ -5,6 +5,7 @@ import { auth, homeByRole } from './api'
 import ShopsView from './views/ShopsView.vue'
 import SeckillView from './views/SeckillView.vue'
 import BlogView from './views/BlogView.vue'
+import BlogDetailView from './views/BlogDetailView.vue'
 import MeView from './views/MeView.vue'
 import NearbyView from './views/NearbyView.vue'
 import MyFavoritesView from './views/MyFavoritesView.vue'
@@ -40,6 +41,7 @@ const router = createRouter({
     { path: '/my-favorites', component: MyFavoritesView, meta: { title: '我的收藏' } },
     { path: '/my-orders', component: MyOrdersView, meta: { title: '我的订单' } },
     { path: '/blog', component: BlogView, meta: { title: '笔记', public: true } },
+    { path: '/blog/:id', component: BlogDetailView, meta: { title: '笔记详情', public: true } },
     { path: '/seckill', component: SeckillView, meta: { title: '秒杀' } },
     { path: '/me', component: MeView, meta: { title: '我的' } },
 
@@ -75,7 +77,7 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  if (to.meta.title) document.title = to.meta.title + ' · 大众点评'
+  if (to.meta.title) document.title = to.meta.title + ' · 蓝鲸点评'
 
   // 已登录还去登录页 → 按角色回首页
   if (to.path === '/login' && auth.loggedIn) {

@@ -34,4 +34,9 @@ public class RedisContants {
     public static final String BLOG_LIKED_KEY="blog:liked:";
 
     public static final String COMMENT_LIKED_KEY = "comment:liked:";
+
+    public static final String CACHE_BANNER_KEY="cache:banner:list";
+    public static final Long CACHE_BANNER_TTL=30L;
+
+    public static final String HOT_WORD_KEY="hot:word:zset";
 }

@@ -272,12 +272,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      */
     @Override
     public Result loginByPassword(LoginFormDTO loginForm) {
-        String email=loginForm.getPhone();
+        String account=loginForm.getPhone();
         String password=loginForm.getPassword();
-        if(email==null||RegexUtils.isEmailInvalid(email)){
-            return Result.fail("邮件格式不正确");
+        // 手机号或邮箱都算合法，两种都非法才拒绝
+        if(account==null||(RegexUtils.isEmailInvalid(account)&&RegexUtils.isPhoneInvalid(account))){
+            return Result.fail("请输入正确的手机号或邮箱");
         }
-        User user=query().eq("phone",email).one();
+        User user=query().eq("phone",account).one();
         if(user==null){
             return Result.fail("账号不存在");
         }
@@ -302,21 +303,24 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      */
     @Override
     public Result register(LoginFormDTO loginForm) {
-        String email=loginForm.getPhone();
-        if(email==null||RegexUtils.isEmailInvalid(email)) {
-            return Result.fail("邮箱格式不正确");
+        String account=loginForm.getPhone();
+        // 手机号或邮箱都算合法，两种都非法才拒绝
+        if(account==null||(RegexUtils.isEmailInvalid(account)&&RegexUtils.isPhoneInvalid(account))) {
+            return Result.fail("请输入正确的手机号或邮箱");
         }
         if(loginForm.getPassword()==null||loginForm.getPassword().length()<6){
             return Result.fail("密码至少为6位!");
         }
-        if(query().eq("phone",email).count()>0){
+        if(query().eq("phone",account).count()>0){
             return Result.fail("账号已存在");
         }
         User user=new User();
-        user.setPhone(email);
+        user.setPhone(account);
         user.setNickName(SystemConstants.USER_NICK_NAME_PREFIX+RandomUtil.randomString(20));
         user.setPassword(PasswordEncoder.encodes(loginForm.getPassword()));
-        user.setRole(1);
+        // 注册角色：前端按"用户/商家/管理员"三端传 1/2/3；不传或非法默认普通用户
+        Integer role=loginForm.getRole();
+        user.setRole(role!=null&&role>=1&&role<=3?role:1);
         save(user);
         return Result.ok();
     }
@@ -390,5 +394,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             }
         }
         return Result.ok(signDays);
+    }
+
+    @Override
+    public String calcLevel(Integer points) {
+        int p=points==null?0:points;
+        if(p>=20000) return "黑金会员";
+        if(p>=5000) return "金卡会员";
+        if(p>=1000) return "银卡会员";
+        return "普卡会员";
     }
 }

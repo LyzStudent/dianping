@@ -33,7 +33,7 @@ spring:
         - id: shop-service
           uri: lb://shop-service
           predicates:
-            - Path=/shop/**,/shop-type/**,/shop-review/**,/upload/**
+            - Path=/shop/**,/shop-type/**,/shop-review/**,/upload/**,/banner/**
         - id: blog-service
           uri: lb://blog-service
           predicates:
@@ -59,6 +59,6 @@ hmdp:
   jwt:
     secret: dianping-microservice-hm-dianping-secret-2026abcd
   security:
-    excludepaths: /user/login,/user/code,/user/loginByPassword,/user/register,/user/registerByPhone,/blog/hot,/shop/**,/shop-type/**,/upload/**,/voucher/**
+    excludepaths: /user/login,/user/code,/user/loginByPassword,/user/register,/user/registerByPhone,/blog/hot,/shop/**,/shop-type/**,/upload/**,/voucher/**,/banner/**
     # 受保护后台路径：即使命中上面的 /shop/** 白名单也必须校验登录（否则 /shop/admin/** 漏检）
     protectpaths: /shop/admin/**,/shop/merchant/**,/shop/inner/**,/voucher/merchant/**,/shop/favorite/**

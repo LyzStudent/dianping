@@ -1,6 +1,9 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { api, auth } from '../api'
+
+const router = useRouter()
 
 const blogForm = ref({ shopId: 1, title: '', image: '', content: '' })
 const bMsg = ref(null)
@@ -18,6 +21,9 @@ function show(el, text, ok) { el.value = text ? { text, ok } : null; }
 function imgList(images) { return (images || '').split(',').filter(Boolean); }
 function avatar(b) { return b.icon || '' }
 function nameOf(b) { return b.name || '用户' + b.userId }
+function fmtTime(t) { return t ? String(t).replace('T', ' ').slice(0, 16) : '' }
+// 笔记/评论里的 <br>/<br/> 转成换行；其余 HTML 由 {{ }} 自动转义，不会注入
+function fmtContent(text) { return (text || '').replace(/<br\s*\/?>/gi, '\n') }
 
 async function loadBlogs(kind) {
   mode.value = kind;
@@ -115,6 +121,9 @@ async function likeComment(c) {
 }
 
 onMounted(() => loadBlogs('hot'));
+
+/** 点击笔记卡片打开详情页 */
+function openDetail(id) { router.push('/blog/' + id) }
 </script>
 
 <template>
@@ -130,7 +139,7 @@ onMounted(() => loadBlogs('hot'));
 
     <!-- 笔记流 -->
     <div class="note-list">
-      <div v-for="b in blogs" :key="b.id" class="note-card">
+      <div v-for="b in blogs" :key="b.id" class="note-card" @click="openDetail(b.id)">
         <!-- 图：1张大图 / 多张小图网格 -->
         <div v-if="imgList(b.image).length" class="note-imgs" :class="'c' + Math.min(imgList(b.image).length, 3)">
           <img v-for="u in imgList(b.image).slice(0, 3)" :key="u" :src="u" @error="e => e.target.style.display='none'">
@@ -138,29 +147,30 @@ onMounted(() => loadBlogs('hot'));
 
         <div class="note-body">
           <div class="note-title">{{ b.title }}</div>
-          <div class="note-content">{{ b.content }}</div>
+          <div class="note-content">{{ fmtContent(b.content) }}</div>
         </div>
 
         <!-- 作者行 -->
         <div class="note-author">
           <img :src="avatar(b)" @error="e => e.target.style.display='none'">
           <span class="nm">{{ nameOf(b) }}</span>
+          <span v-if="fmtTime(b.createTime)" class="note-time">{{ fmtTime(b.createTime) }}</span>
           <span
             v-if="auth.loggedIn && !(auth.me && b.userId === auth.me.id)"
             class="f-btn"
             :class="{ on: followState[b.id] === '1' }"
-            @click="toggleFollow(b)"
+            @click.stop="toggleFollow(b)"
           >{{ followState[b.id] === '1' ? '已关注' : '+ 关注' }}</span>
         </div>
 
         <!-- 操作栏 -->
         <div class="note-actions">
-          <span :class="{ liked: b.isLike }" @click="toggleLike(b)">♥ {{ b.liked || 0 }}</span>
-          <span @click="toggleComments(b)">💬 {{ b.comments || 0 }}</span>
+          <span :class="{ liked: b.isLike }" @click.stop="toggleLike(b)">♥ {{ b.liked || 0 }}</span>
+          <span @click.stop="toggleComments(b)">💬 {{ b.comments || 0 }}</span>
         </div>
 
         <!-- 评论 -->
-        <div v-if="expanded[b.id]" class="note-comments">
+        <div v-if="expanded[b.id]" class="note-comments" @click.stop>
           <div v-if="auth.loggedIn" class="cbox">
             <input type="text" v-model="commentInput[b.id]" placeholder="写评论…" @keyup.enter="addComment(b)">
             <button class="btn sm" @click="addComment(b)">发送</button>
@@ -171,7 +181,7 @@ onMounted(() => loadBlogs('hot'));
               <span class="muted">{{ c.createTime }}</span>
               <span :class="{ liked: c.isLike }" style="float:right;cursor:pointer" @click="likeComment(c)">♥ {{ c.liked || 0 }}</span>
             </div>
-            <div class="text">{{ c.content }}</div>
+            <div class="text">{{ fmtContent(c.content) }}</div>
           </div>
           <div v-if="!(commentsMap[b.id] || []).length" class="muted" style="padding:4px 0">暂无评论</div>
         </div>
@@ -226,7 +236,9 @@ onMounted(() => loadBlogs('hot'));
 .note-card {
   background: #fff; border-radius: 14px; margin-bottom: 12px;
   overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  cursor: pointer;
 }
+.note-card:active { opacity: .85; }
 .note-imgs { display: grid; gap: 2px; background: #f0f0f0; }
 .note-imgs.c1 { grid-template-columns: 1fr; }
 .note-imgs.c2 { grid-template-columns: 1fr 1fr; }
@@ -239,12 +251,14 @@ onMounted(() => loadBlogs('hot'));
 .note-title { font-size: 16px; font-weight: 700; color: #222; margin-bottom: 4px; }
 .note-content {
   font-size: 13px; color: #666; line-height: 1.6;
+  white-space: pre-line;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 
 .note-author { display: flex; align-items: center; gap: 8px; padding: 8px 14px 4px; }
 .note-author img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; background: #eee; }
 .note-author .nm { flex: 1; font-size: 13px; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-time { flex: none; font-size: 11px; color: #bbb; }
 .note-author .f-btn { font-size: 12px; color: #ff6034; cursor: pointer; }
 .note-author .f-btn.on { color: #999; }
 
@@ -259,6 +273,7 @@ onMounted(() => loadBlogs('hot'));
   flex: 1; height: 30px; border: 1px solid #eee; border-radius: 15px;
   padding: 0 12px; font-size: 13px; background: #fff;
 }
+.note-comments .comment .text { white-space: pre-line; }
 
 .note-msg { margin: 8px 14px; padding: 8px 12px; border-radius: 8px; font-size: 13px; }
 .note-msg.ok { background: #e8f5e9; color: #2e7d32; }

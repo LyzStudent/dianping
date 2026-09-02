@@ -79,6 +79,11 @@ public class UserController {
     public Result me(){
         //获取当前登录用户并返回
         UserDTO user= UserHolder.getUser();
+        User db=userService.getById(user.getId());
+        if(db!=null){
+            user.setPoints(db.getPoints());
+            user.setLevel(userService.calcLevel(db.getPoints()));
+        }
         return Result.ok(user);
     }
 
@@ -198,10 +203,21 @@ public class UserController {
         return ok?Result.ok():Result.fail("操作失败");
     }
 
+    /**
+     * 解封用户:恢复为普通用户(role=1),登录限制解除
+     * @return
+     */
     @GetMapping("/admin/stats/user-count")
     @RequireRole("3")
     public Result userCount(){
         return Result.ok(userService.count());
+    }
+
+    @PostMapping("/admin/user/{id}/unban")
+    public Result adminUnbanUser(@PathVariable("id") Long userId){
+        boolean ok=userService.update().setSql("role=1").eq("id",userId).update();
+        return ok?Result.ok():Result.fail("操作失败");
+
     }
 
 }
