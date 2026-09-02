@@ -71,6 +71,11 @@ public class Shop implements Serializable {
     private Long avgPrice;
 
     /**
+     * 联系电话
+     */
+    private String phone;
+
+    /**
      * 销量
      */
     private Integer sold;

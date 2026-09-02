@@ -66,4 +66,11 @@ public interface UserService extends IService<User> {
     Result registerByPhone(LoginFormDTO loginForm);
 
     Result signDate(String date);
+
+    /**
+     * 按积分计算会员等级
+     * @param points
+     * @return
+     */
+    String calcLevel(Integer points);
 }

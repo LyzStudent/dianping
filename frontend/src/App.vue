@@ -1,9 +1,10 @@
 <script setup>
 import { computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api, auth } from './api'
 
 const route = useRoute()
+const router = useRouter()
 
 onMounted(() => auth.refreshMe())
 
@@ -23,7 +24,7 @@ const roleText = computed(() => {
 async function logout() {
   try { await api.post('/user/logout'); } catch { /* token 失效也无妨 */ }
   auth.clear();
-  window.location.href = '/shops';
+  router.replace('/shops'); // SPA 内跳转，不触发整页刷新
 }
 </script>
 
@@ -31,7 +32,7 @@ async function logout() {
   <!-- 用户端：移动 App 壳（顶部条 + 内容滚动区 + 底部 TabBar） -->
   <div v-if="!isBackend" class="app-shell">
     <div class="app-top">
-      <span class="brand">🦘 大众点评</span>
+      <span class="brand">🐋 蓝鲸点评</span>
       <div class="app-top-right">
         <template v-if="auth.me">
           <span class="role-badge">{{ roleText }}</span>

@@ -21,6 +21,20 @@ const roleText = computed(() => {
   }
 })
 
+// 会员等级：优先用后端 /user/me 返回的 level，否则按积分兜底计算
+const levelInfo = computed(() => {
+  const me = auth.me || {}
+  const points = Number(me.points) || 0
+  let level = me.level
+  if (!level) {
+    if (points >= 20000) level = '黑金会员'
+    else if (points >= 5000) level = '金卡会员'
+    else if (points >= 1000) level = '银卡会员'
+    else level = '普卡会员'
+  }
+  return { level, points }
+})
+
 function show(text, ok) { msg.value = { text, ok }; }
 function pad(n) { return String(n).padStart(2, '0') }
 function dateStr(y, m, d) { return `${y}-${pad(m)}-${pad(d)}` }
@@ -76,7 +90,7 @@ async function sendCode() {
   sending.value = true;
   try {
     await api.post('/user/code?phone=' + encodeURIComponent(email.value));
-    show('验证码已发送，请到 user-service 控制台查看', true);
+    show('验证码已发送', true);
   } catch (e) { show(e.message, false); }
   finally { sending.value = false; }
 }
@@ -113,7 +127,7 @@ onMounted(() => {
     </div>
     <div class="form-row"><button class="btn" @click="login">登录</button></div>
     <div v-if="msg" class="msg" :class="msg.ok ? 'ok' : 'err'">{{ msg.text }}</div>
-    <div class="hint">未注册的邮箱会先自动注册再发码；验证码打印在 user-service 控制台日志里（MockMailSender）。</div>
+    <div class="hint">未注册的邮箱会先自动注册再发码。</div>
   </div>
 
   <!-- 已登录：用户卡 + 签到 + 月历 + 菜单 -->
@@ -123,6 +137,10 @@ onMounted(() => {
       <div class="me-info">
         <div class="me-name">{{ auth.me.nickName }}</div>
         <div class="me-id">ID {{ auth.me.id }} · {{ roleText }}</div>
+      </div>
+      <div class="me-level">
+        <span class="level-badge">🐋 {{ levelInfo.level }}</span>
+        <span class="level-points">积分 {{ levelInfo.points }}</span>
       </div>
     </div>
 
@@ -182,6 +200,24 @@ onMounted(() => {
 }
 .me-name { font-size: 17px; font-weight: 700; }
 .me-id { font-size: 12px; opacity: .85; margin-top: 2px; }
+.me-level {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+.level-badge {
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, .22);
+  border: 1px solid rgba(255, 255, 255, .5);
+  padding: 3px 12px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+.level-points { font-size: 12px; opacity: .9; }
 
 .sign-banner {
   display: flex; align-items: center; justify-content: space-between;

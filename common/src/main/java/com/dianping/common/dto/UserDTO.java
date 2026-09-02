@@ -8,4 +8,14 @@ public class UserDTO {
     private String nickName;
     private String icon;
     private Integer role;
+
+    /**
+     * 积分
+     */
+    private Integer points;
+
+    /**
+     * 会员等级:普卡 / 银卡 / 金卡 / 黑金
+     */
+    private String level;
 }

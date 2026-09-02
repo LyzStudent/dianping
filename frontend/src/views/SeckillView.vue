@@ -1,6 +1,9 @@
 <script setup>
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '../api'
+
+const router = useRouter()
 
 // 券列表
 const listShopId = ref(1)
@@ -27,14 +30,22 @@ async function buy(vid) {
   if (!id) return show(buyMsg, '请先输入秒杀券ID', false);
   try {
     const orderId = await api.post('/seckill/' + id);
-    show(buyMsg, `秒杀成功！订单ID=${orderId}（Redis预扣库存 + 一人一单 + Seata 全局事务）`, true);
+    show(buyMsg, `秒杀成功！订单号 ${orderId}`, true);
   } catch (e) { show(buyMsg, e.message, false); }
 }
 
 onMounted(loadVouchers);
+
+/** 返回上一页（无历史记录时回首页） */
+function goBack() {
+  if (window.history.length > 1) router.back()
+  else router.replace('/shops')
+}
 </script>
 
 <template>
+  <div class="back-bar"><span class="page-back" @click="goBack">‹ 返回</span></div>
+
   <!-- 店铺券列表 -->
   <div class="card">
     <div class="row-between">
@@ -69,7 +80,7 @@ onMounted(loadVouchers);
       <input type="number" v-model="buyVoucherId" placeholder="voucherId">
       <button class="btn" @click="buy()">立即秒杀</button>
     </div>
-    <div class="hint">秒杀下单走 Redis 预扣 + 一人一单 + Seata 全局事务；需要先登录。Sentinel 限流时返回"系统繁忙"。</div>
+    <div class="hint">参与秒杀请先登录，库存有限、先到先得。</div>
     <div v-if="buyMsg" class="msg" :class="buyMsg.ok ? 'ok' : 'err'">{{ buyMsg.text }}</div>
   </div>
 </template>
